@@ -1,0 +1,40 @@
+# 临时文件和构建输出
+temp_release/
+temp/
+tmp/
+build/
+dist/
+*.egg-info/
+
+# 开发相关文件
+参考文件/
+test/
+*.log
+*.txt
+!README.md
+
+# 二进制文件备份
+*.bak
+*.backup
+
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# 验证目录
+verify_*/
+
+# 压缩包（发布时手动上传到 Release）
+*.zip

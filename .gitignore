@@ -38,3 +38,18 @@ verify_*/
 
 # 压缩包（发布时手动上传到 Release）
 *.zip
+
+# v1.3 版本测试文件夹
+comfyui-llama-yf-v1.3/
+comfyui-qwen3.5-yf-main/
+
+# 文档文件（开发用）
+CONFIG_SUCCESS.md
+TEST_VISUAL_CONTINUITY_RESULT.md
+TROUBLESHOOTING.md
+UPLOAD_FILES.md
+USAGE_LLAMA_SERVER.md
+README.md.backup.v1.2
+
+# 日志目录
+log/

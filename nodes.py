@@ -1148,15 +1148,20 @@ class LlamaInference:
             print(f"[llama-yf] Server command: {' '.join(cmd)}")
             
             # 启动服务器，输出日志到终端
-            server_process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            server_process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace")
             
             # 等待服务器启动
-            for _ in range(30):
+            for _ in range(120):
                 time.sleep(1)
                 if is_server_running(api_url):
                     break
             else:
-                raise RuntimeError("Failed to start llama-server")
+                # Log server output for debugging
+                if server_process and server_process.stderr:
+                    stderr_out = server_process.stderr.read()
+                    if stderr_out:
+                        print(f"[llama-yf] Server stderr: {stderr_out[:500]}")
+                raise RuntimeError("Failed to start llama-server (waited 120s)")
         
         # 检查是否需要启动服务器
         if not is_server_running(api_url):

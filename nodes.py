@@ -1305,8 +1305,8 @@ class LlamaInference:
                     result = content
                     thinking = ""
                 else:
-                    # content 为空时的降级处理（如生成长度超限）
-                    result = reasoning_content
+                    # thinking关闭时不使用reasoning_content
+                    result = content
                     thinking = ""
             print(f"[llama-yf] Final result length: {len(result)} chars")
             print(f"[llama-yf] Thinking length: {len(thinking)} chars")

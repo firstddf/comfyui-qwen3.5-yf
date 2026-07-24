@@ -1439,7 +1439,6 @@ class LlamaInference:
         else:
             prompt = PRESET_PROMPTS[preset_prompt].replace("@", "video" if video else "image")
         
-        use_api_bool = use_api.lower() == "true" if isinstance(use_api, str) else bool(use_api)
         
         has_images = False
         image_list = None
@@ -1456,6 +1455,15 @@ class LlamaInference:
         if needs_images and not has_images:
             raise ValueError(f"Inference mode '"+chr(123)+"inference_mode'"+chr(125)+" requires image input")
         
+        # 解析 use_api 布尔值和模型路径
+        use_api_bool = use_api.lower() == "true" if isinstance(use_api, str) else bool(use_api)
+        cli = None
+        model_path = None
+        mmproj_path = None
+        if not use_api_bool and model_file:
+            cli = LlamaYF._find_cli()
+            model_path, mmproj_path = LlamaYF._ensure_model(model_file, mmproj_file)
+
         out1, out2 = "", []
         response, thinking = "", ""
         
@@ -1483,10 +1491,13 @@ class LlamaInference:
                 if not enable_thinking:
                     thinking = ""
             else:
+                # 解析 model 路径
+                _cli = LlamaYF._find_cli()
+                _model_path, _mmproj_path = LlamaYF._ensure_model(model_file, mmproj_file)
                 raw_output = LlamaYF._invoke_cli(
-                    cli_path=cli,
-                    model_path=model_path,
-                    mmproj_path=mmproj_path,
+                    cli_path=_cli,
+                    model_path=_model_path,
+                    mmproj_path=_mmproj_path,
                     prompt=prompt,
                     system_prompt=system_prompt,
                     image_paths=None,

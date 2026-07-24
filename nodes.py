@@ -1205,6 +1205,12 @@ class LlamaInference:
                 "--port", "8080",
                 "--host", "127.0.0.1"
             ]
+            # 使用自定义 chat template 处理 enable_thinking
+            template_file = llama_dir / "qwen35_chat_template.jinja"
+            if template_file.exists():
+                cmd.extend(["--chat-template-file", str(template_file)])
+                if not enable_thinking:
+                    cmd.extend(["--chat-template-kwargs", '{"enable_thinking": false}'])
 
             print(f"[llama-yf] Server command: {' '.join(cmd)}")
             

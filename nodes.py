@@ -686,13 +686,11 @@ class LlamaYF:
             prompt = prompt_template.replace("@", media_type)
             print(f"[llama-yf] Using preset prompt: {preset_prompt} (media: {media_type})")
         
-        # API 模式下不需要本地 llama-mtmd-cli 和模型路径
+        # 统一使用 API 模式（llama-server），不再使用 CLI
         cli = None
         model_path = None
         mmproj_path = None
-        if not use_api:
-            cli = LlamaYF._find_cli(cli_path)
-            model_path, mmproj_path = LlamaYF._ensure_model(model_file, mmproj_file)
+        use_api = True
 
         out1 = ""  # 单个字符串输出
         out2 = []  # 列表输出
@@ -1456,22 +1454,17 @@ class LlamaInference:
             raise ValueError(f"Inference mode '"+chr(123)+"inference_mode'"+chr(125)+" requires image input")
         
         # text 模式强制使用 API
-        if is_text_mode:
-            use_api = "True"
-            use_api_bool = True
-            if api_url and api_url.strip():
-                api_url = api_url.strip()
-            else:
-                api_url = "http://127.0.0.1:8080"
+        # 统一使用 API 模式（llama-server），不再使用 CLI
+        use_api = "True"
+        use_api_bool = True
+        if api_url and api_url.strip():
+            api_url = api_url.strip()
+        else:
+            api_url = "http://127.0.0.1:8080"
         
-        # 解析 use_api 布尔值和模型路径
-        use_api_bool = use_api.lower() == "true" if isinstance(use_api, str) else bool(use_api)
         cli = None
         model_path = None
         mmproj_path = None
-        if not use_api_bool and model_file:
-            cli = LlamaYF._find_cli("")
-            model_path, mmproj_path = LlamaYF._ensure_model(model_file, mmproj_file)
 
         out1, out2 = "", []
         response, thinking = "", ""

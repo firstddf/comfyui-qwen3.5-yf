@@ -672,8 +672,12 @@ class LlamaYF:
 
         video_input = inference_mode == "video"
         
-        # 处理 preset_prompt 逻辑
-        if custom_prompt and custom_prompt.strip():
+        # 处理 prompt 逻辑
+        if is_text_mode:
+            # 文本模式：直接用 custom_prompt，忽略预设
+            prompt = custom_prompt.strip() if custom_prompt and custom_prompt.strip() else ""
+            print(f"[llama-yf] Text mode: using custom_prompt directly")
+        elif custom_prompt and custom_prompt.strip():
             prompt = custom_prompt.strip()
             print(f"[llama-yf] Using custom prompt override")
         else:
@@ -693,6 +697,10 @@ class LlamaYF:
         out1 = ""  # 单个字符串输出
         out2 = []  # 列表输出
         video_input = inference_mode == "video"
+        
+        # 文本模式强制关闭思考
+        if is_text_mode:
+            enable_thinking = False
         
         # 如果是 video 模式，添加 system prompt 提示
         if video_input:
@@ -1395,7 +1403,14 @@ class LlamaInference:
         
         # 生成最终 prompt
         video = inference_mode == "video"
-        if custom_prompt and custom_prompt.strip():
+        is_text_mode = inference_mode == "text"
+        if is_text_mode:
+            # Text mode: use custom_prompt directly, ignore preset
+            prompt = custom_prompt.strip() if custom_prompt and custom_prompt.strip() else ""
+            print(f"[llama-yf] Text mode: using custom_prompt directly")
+            # Force disable thinking in text mode
+            enable_thinking = False
+        elif custom_prompt and custom_prompt.strip():
             prompt = PRESET_PROMPTS[preset_prompt].replace("#", custom_prompt.strip()).replace("@", "video" if video else "image")
         else:
             prompt = PRESET_PROMPTS[preset_prompt].replace("@", "video" if video else "image")

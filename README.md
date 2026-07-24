@@ -1,6 +1,6 @@
 # ComfyUI Llama-YF 本地编译 Llama 插件
 
-**版本**: v1.4.0
+**版本**: v1.4.1
 
 一个用于在 ComfyUI 中运行多模态 LLM 模型的插件，基于本地编译的 llama.cpp，**不依赖 llama-cpp-python**。
 
@@ -202,8 +202,7 @@ comfyui-llama-yf/
 ├── __init__.py              # 插件注册
 ├── nodes.py                 # 主节点代码
 ├── llama/
-│   ├── llama-mtmd-cli.exe   # 本地编译的推理工具
-│   ├── llama-server.exe     # llama.cpp 服务器（用于 API 模式）
+│   ├── llama-server.exe     # llama.cpp 服务器
 │   ├── llama-server-impl.dll # 服务器实现库
 │   ├── qwen35_chat_template.jinja # Qwen3.5 自定义聊天模板
 │   └── *.dll                # 运行时依赖库
@@ -323,7 +322,14 @@ A: 下载最新编译的 `llama-mtmd-cli.exe` 并替换 `llama/` 目录中的文
 
 ## 📝 更新日志
 
-### v1.4.0 (当前版本)
+### v1.4.1 (当前版本)
+
+- 🧹 **代码精简** - 移除所有 CLI 相关代码（`llama-mtmd-cli.exe`、`_find_cli`、`_invoke_cli`），代码从 1747 行精简至 1321 行
+- 🔧 **统一 API 模式** - 所有推理统一使用 `llama-server` API 模式，不再依赖 CLI 工具
+- 📁 **删除 llama-mtmd-cli.exe** - 插件目录中移除 CLI 二进制文件
+- 🧠 **思考模式修复** - text 模式强制使用 API，避免 CLI 路径错误
+
+### v1.4.0
 
 - 🧠 **思考模式修复** - 修复 Qwen3.5 原生思考模式导致 thinking 输出无法关闭的问题
 - 📝 **自定义 Jinja 模板** - 添加 `qwen35_chat_template.jinja`，在模板层面正确处理 `enable_thinking` 参数

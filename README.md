@@ -1,6 +1,6 @@
 # ComfyUI Llama-YF 本地编译 Llama 插件
 
-**版本**: v1.3.0
+**版本**: v1.4.0
 
 一个用于在 ComfyUI 中运行多模态 LLM 模型的插件，基于本地编译的 llama.cpp，**不依赖 llama-cpp-python**。
 
@@ -22,8 +22,10 @@
 - ✅ 简洁的输出日志
 - ✅ 12 种中文预设提示词模板
 - ✅ 视频/多图处理支持
-- ✅ 三种推理模式（one by one / images / video）
+- ✅ 四种推理模式（one by one / images / video / text）
 - ✅ 思考链提取（think 标签解析）
+- ✅ Qwen3.5 原生思考模式正确处理
+- ✅ 自定义 Jinja chat template 支持
 - ✅ API 模式（llama.cpp server）
 - ✅ 模块化节点支持（模型选择 + 参数配置 + 推理）
 
@@ -150,6 +152,7 @@
   - `one by one` - 逐图处理（稳定，每张图单独输出）
   - `images` - 多图批量处理（所有图像一起推理）
   - `video` - 视频帧采样处理（均匀采样 max\_frames 帧）
+  - `text` - 纯文本推理（无需图片，用于文本处理任务）
 
 ### 视频/多图参数
 
@@ -200,7 +203,10 @@ comfyui-llama-yf/
 ├── nodes.py                 # 主节点代码
 ├── llama/
 │   ├── llama-mtmd-cli.exe   # 本地编译的推理工具
-│   └── llama-server.exe     # llama.cpp 服务器（用于 API 模式）
+│   ├── llama-server.exe     # llama.cpp 服务器（用于 API 模式）
+│   ├── llama-server-impl.dll # 服务器实现库
+│   ├── qwen35_chat_template.jinja # Qwen3.5 自定义聊天模板
+│   └── *.dll                # 运行时依赖库
 ├── README.md                # 本文档
 └── models/                  # 模型存储目录（需创建）
 ```
@@ -317,7 +323,18 @@ A: 下载最新编译的 `llama-mtmd-cli.exe` 并替换 `llama/` 目录中的文
 
 ## 📝 更新日志
 
-### v1.3.0 (当前版本)
+### v1.4.0 (当前版本)
+
+- 🧠 **思考模式修复** - 修复 Qwen3.5 原生思考模式导致 thinking 输出无法关闭的问题
+- 📝 **自定义 Jinja 模板** - 添加 `qwen35_chat_template.jinja`，在模板层面正确处理 `enable_thinking` 参数
+- 🔧 **chat-template-kwargs** - 使用 `--chat-template-kwargs` 替代不可用的 `--default-chat-template-kwargs`
+- 🔍 **system prompt 过滤** - `enable_thinking=False` 时自动移除可能触发原生思考的指令
+- 📝 **文本推理模式** - 新增 `text` 推理模式，支持纯文本处理（无需图片）
+- 🐛 **thinking 降级修复** - 修复 `content` 为空时错误使用 `reasoning_content` 的问题
+- ⏱️ **服务器启动优化** - 超时从 30s 增加到 120s，添加 stderr 日志输出
+- 📦 **llama.cpp 更新** - 更新二进制文件到 2026-07-15 编译版本
+
+### v1.3.0
 
 - 🌐 **API 模式支持** - 新增 llama.cpp server 模式，支持远程调用
 - 🔧 **模块化节点** - 新增 LlamaModelSelect、LlamaParams、LlamaInference 三个独立节点

@@ -1294,20 +1294,22 @@ class LlamaInference:
             content = msg.get("content", "")
             reasoning_content = msg.get("reasoning_content", "")
             
-            # 处理 enable_thinking 开关
-            if enable_thinking:
-                # 启用思考模式：content 是答案，reasoning_content 是思考
-                result = content if content else reasoning_content
-                thinking = reasoning_content
+            # 处理返回内容
+            # content = 最终答案, reasoning_content = 思考过程
+            # Qwen3.5 原生思考模式会把内容放入 reasoning_content
+            if content:
+                # content 有内容：正常情况
+                result = content
+                thinking = reasoning_content if enable_thinking else ""
+            elif reasoning_content:
+                # content 为空，reasoning_content 有内容：
+                # Qwen3.5 原生思考模式，将 reasoning_content 作为结果
+                result = reasoning_content
+                thinking = reasoning_content if enable_thinking else ""
             else:
-                # 不启用思考模式：优先使用 content，但如果 content 为空则降级使用 reasoning_content
-                if content:
-                    result = content
-                    thinking = ""
-                else:
-                    # thinking关闭时不使用reasoning_content
-                    result = content
-                    thinking = ""
+                # 都为空
+                result = ""
+                thinking = ""
             print(f"[llama-yf] Final result length: {len(result)} chars")
             print(f"[llama-yf] Thinking length: {len(thinking)} chars")
         except Exception as e:

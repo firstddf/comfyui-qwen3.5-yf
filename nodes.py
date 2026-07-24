@@ -1461,7 +1461,7 @@ class LlamaInference:
         model_path = None
         mmproj_path = None
         if not use_api_bool and model_file:
-            cli = LlamaYF._find_cli()
+            cli = LlamaYF._find_cli("")
             model_path, mmproj_path = LlamaYF._ensure_model(model_file, mmproj_file)
 
         out1, out2 = "", []

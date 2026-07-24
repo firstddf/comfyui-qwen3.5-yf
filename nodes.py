@@ -146,7 +146,7 @@ class LlamaYF:
                     "multiline": True,
                     "tooltip": "Optional system prompt to set model behavior (支持中文)",
                 }),
-                "inference_mode": (["one by one", "images", "video"], {
+                "inference_mode": (["one by one", "images", "video", "text"], {
                     "default": "one by one",
                     "tooltip": "one by one: Process one image at a time\nimages:  Process all images at once\nvideo:  Treat input images as video frames"
                 }),
@@ -722,12 +722,64 @@ class LlamaYF:
                         image_list = [image]
             
             # 检查 inference_mode 是否需要图像
+            is_text_mode = inference_mode == "text"
             needs_images = inference_mode in ["images", "video"]
             
             if needs_images and not has_images:
                 raise ValueError(f"[llama-yf] Inference mode '{inference_mode}' requires image input, but no valid images provided.")
             
-            if has_images:
+            if is_text_mode and not has_images:
+                # Text-only inference
+                print(f"[llama-yf] Text-only inference")
+                
+                if use_api:
+                    raw_output = LlamaYF._invoke_api(
+                        api_url=api_url,
+                        model=api_model,
+                        prompt=prompt,
+                        system_prompt=system_prompt,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        top_p=top_p,
+                        top_k=top_k,
+                        repeat_penalty=repeat_penalty,
+                        ctx_size=ctx_size,
+                        enable_thinking=enable_thinking,
+                        seed=seed,
+                    )
+                else:
+                    raw_output = LlamaYF._invoke_cli(
+                        cli_path=cli,
+                        model_path=model_path,
+                        mmproj_path=mmproj_path,
+                        prompt=prompt,
+                        system_prompt=system_prompt,
+                        image_paths=None,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        top_p=top_p,
+                        top_k=top_k,
+                        repeat_penalty=repeat_penalty,
+                        n_gpu_layers=n_gpu_layers,
+                        ctx_size=ctx_size,
+                        enable_thinking=enable_thinking,
+                        seed=seed,
+                        threads=threads,
+                        disable_warmup=disable_warmup,
+                        fit_off=fit_off,
+                        max_frames=max_frames,
+                        force_cpu=force_cpu,
+                    )
+                
+                response, thinking = LlamaYF._extract_thinking(raw_output)
+                
+                if not enable_thinking:
+                    thinking = ""
+                
+                out1 = response
+                out2 = [response]
+            
+            elif has_images:
                 frames = image_list
                 if video_input:
                     # 视频模式：采样帧
@@ -1045,7 +1097,7 @@ class LlamaInference:
             "preset_prompt": (PRESET_TAGS, {"default": "常规 - 描述"}),
             "custom_prompt": ("STRING", {"default": "", "multiline": True}),
             "system_prompt": ("STRING", {"default": "", "multiline": True}),
-            "inference_mode": (["one by one", "images", "video"], {"default": "one by one"}),
+            "inference_mode": (["one by one", "images", "video", "text"], {"default": "one by one"}),
             "model_info": ("STRING", {"default": ""}),
             "params_info": ("STRING", {"default": ""}),
             "video_params_info": ("STRING", {"default": ""}),
@@ -1360,14 +1412,67 @@ class LlamaInference:
                 has_images = True
                 image_list = [image]
         
+                is_text_mode = inference_mode == "text"
         needs_images = inference_mode in ["images", "video"]
         if needs_images and not has_images:
-            raise ValueError(f"Inference mode '{inference_mode}' requires image input")
+            raise ValueError(f"Inference mode '"+chr(123)+"inference_mode'"+chr(125)+" requires image input")
         
         out1, out2 = "", []
         response, thinking = "", ""
         
-        if has_images:
+        if is_text_mode and not has_images:
+            # Text-only inference
+            print(f"[llama-yf] Text-only inference")
+            
+            if use_api_bool:
+                response, thinking = self._invoke_api(
+                    api_url=api_url,
+                    model_file=model_file,
+                    mmproj_file=mmproj_file,
+                    ctx_size=ctx_size,
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    top_k=top_k,
+                    repeat_penalty=repeat_penalty,
+                    seed=seed,
+                    enable_thinking=enable_thinking,
+                    image_b64_list=None,
+                )
+                if not enable_thinking:
+                    thinking = ""
+            else:
+                raw_output = self._invoke_cli(
+                    cli_path=cli,
+                    model_path=model_path,
+                    mmproj_path=mmproj_path,
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                    image_paths=None,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    top_k=top_k,
+                    repeat_penalty=repeat_penalty,
+                    n_gpu_layers=n_gpu_layers,
+                    ctx_size=ctx_size,
+                    enable_thinking=enable_thinking,
+                    seed=seed,
+                    threads=threads,
+                    disable_warmup=disable_warmup,
+                    fit_off=fit_off,
+                    max_frames=max_frames,
+                    force_cpu=force_cpu,
+                )
+                response, thinking = self._extract_thinking(raw_output)
+                if not enable_thinking:
+                    thinking = ""
+            out1 = response
+            out2 = [response]
+        
+        elif has_images:
             frames = image_list
             if inference_mode == "one by one":
                 tmp_list = []

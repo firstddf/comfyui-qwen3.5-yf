@@ -442,14 +442,20 @@ class LlamaYF:
             cmd.extend(["--image", ",".join(abs_image_paths)])
 
         # 构建提示词
+        thinking_instruction = "请先思考再回答，将思考过程放在<think>标签内。"
+        no_thinking_instruction = "直接回答问题，不要输出任何思考过程，不要使用<think>标签。"
         if system_prompt and system_prompt.strip():
-            full_prompt = f"<|im_start|>system\n{system_prompt.strip()}\n<|im_end|>\n<|im_start|>user\n{prompt}\n<|im_end|>\n<|im_start|>assistant\n"
+            sys_text = system_prompt.strip()
+            if enable_thinking:
+                sys_text = thinking_instruction + "\n" + sys_text
+            else:
+                sys_text = no_thinking_instruction + "\n" + sys_text
+            full_prompt = f"<im_start>system\n{sys_text}\n</im_start>\n<im_start>user\n{prompt}\n</im_start>\n<im_start>assistant\n"
         else:
-            full_prompt = f"<|im_start|>user\n{prompt}\n<|im_end|>\n<|im_start|>assistant\n"
-
-        # 如果启用了思考模式
-        if enable_thinking:
-            full_prompt = f"<|im_start|>system\n请先思考再回答，将思考过程放在<think>标签内。\n<|im_end|>\n" + full_prompt
+            if enable_thinking:
+                full_prompt = f"<im_start>system\n{thinking_instruction}\n</im_start>\n<im_start>user\n{prompt}\n</im_start>\n<im_start>assistant\n"
+            else:
+                full_prompt = f"<im_start>system\n{no_thinking_instruction}\n</im_start>\n<im_start>user\n{prompt}\n</im_start>\n<im_start>assistant\n"
 
         cmd.extend(["-p", full_prompt])
 
@@ -1167,13 +1173,16 @@ class LlamaInference:
             model = resp.json()["data"][0]["id"] if resp.status_code == 200 and "data" in resp.json() else "default"
         except: model = "default"
         
-        # 如果启用思考模式，添加特殊的 system prompt
+                # 如果启用思考模式，添加特殊的 system prompt
         if enable_thinking:
             if system_prompt and system_prompt.strip():
                 system_prompt = "请先思考再回答，将思考过程放在<think>标签内。\n" + system_prompt
             else:
                 system_prompt = "请先思考再回答，将思考过程放在<think>标签内。"
-        
+        elif system_prompt and system_prompt.strip():
+            system_prompt = "直接回答问题，不要输出任何思考过程，不要使用<think>标签。\n" + system_prompt
+        else:
+            system_prompt = "直接回答问题，不要输出任何思考过程，不要使用<think>标签。"
         messages = []
         if system_prompt and system_prompt.strip(): messages.append({"role": "system", "content": system_prompt.strip()})
         

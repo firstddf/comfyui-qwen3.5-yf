@@ -1205,6 +1205,9 @@ class LlamaInference:
                 "--port", "8080",
                 "--host", "127.0.0.1"
             ]
+            # 如果思考模式关闭，在模板层面禁用原生思考
+            if not enable_thinking:
+                cmd.extend(["--default-chat-template-kwargs", '{"enable_thinking": false}'])
             print(f"[llama-yf] Server command: {' '.join(cmd)}")
             
             # 启动服务器，输出日志到终端

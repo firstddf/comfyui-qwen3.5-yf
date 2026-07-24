@@ -1,5 +1,5 @@
 # ComfyUI-llama-yf Plugin
-# Fast inference node using llama.cpp (via llama-mtmd-cli subprocess)
+# Fast inference node using llama.cpp (via llama-server subprocess)
 # Model files are loaded from ComfyUI's models/LLM directory
 #
 # Credits and Acknowledgments:
@@ -50,7 +50,6 @@ PRESET_PROMPTS = {
 
 PRESET_TAGS = list(PRESET_PROMPTS.keys())
 
-
 def image2base64(image):
     """Convert image tensor to base64 string"""
     img = Image.fromarray(image)
@@ -58,7 +57,6 @@ def image2base64(image):
     img.save(buffered, format="JPEG", quality=85)
     img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
     return img_base64
-
 
 def scale_image(image: torch.Tensor, max_size: int = 128):
     """Scale image to max_size while preserving aspect ratio"""
@@ -71,7 +69,6 @@ def scale_image(image: torch.Tensor, max_size: int = 128):
     img_resized = img_pil.resize((new_w, new_h), Image.Resampling.LANCZOS)
     
     return np.array(img_resized)
-
 
 def get_model_files():
     """扫描 LLM 目录下的所有 GGUF 模型文件（包括子目录）"""
@@ -93,7 +90,6 @@ def get_model_files():
     
     return sorted(gguf_files)
 
-
 def get_mmproj_files():
     """扫描 LLM 目录下的所有 mmproj 文件（包括子目录）"""
     llm_dir = Path(folder_paths.models_dir) / "LLM"
@@ -112,7 +108,6 @@ def get_mmproj_files():
         return ["-- 未找到 mmproj 文件 --"]
     
     return sorted(mmproj_files)
-
 
 class LlamaYF:
     """LLaMA YF node — fast inference via llama.cpp."""
@@ -212,7 +207,7 @@ class LlamaYF:
                 }),
                 "use_api": ("BOOLEAN", {
                     "default": False,
-                    "tooltip": "Use local API (127.0.0.1:8080) instead of llama-mtmd-cli",
+                    "tooltip": "Use local API (127.0.0.1:8080) instead of llama-server",
                 }),
                 "api_url": ("STRING", {
                     "default": "http://127.0.0.1:8080",
@@ -240,7 +235,7 @@ class LlamaYF:
                 }),
                 "disable_warmup": ("BOOLEAN", {
                     "default": True,
-                    "tooltip": "Disable llama-mtmd-cli warmup (--no-warmup) to avoid some CUDA init crashes.",
+                    "tooltip": "Disable warmup to avoid some CUDA init crashes.",
                 }),
                 "fit_off": ("BOOLEAN", {
                     "default": True,
@@ -253,10 +248,7 @@ class LlamaYF:
             },
             "optional": {
                 "image": ("IMAGE", {"tooltip": "Image for vision tasks"}),
-                "cli_path": ("STRING", {
-                    "default": "",
-                    "tooltip": "Path to llama-mtmd-cli binary. Auto-detected if empty.",
-                }),
+
             },
         }
 
@@ -323,44 +315,6 @@ class LlamaYF:
         return model_path_obj, mmproj_path_obj
 
     @staticmethod
-    def _find_cli(cli_path_override: str) -> str:
-        """Find the llama-mtmd-cli binary - 优先使用插件目录内的版本"""
-        
-        # 1. 优先使用用户通过参数指定的路径
-        if cli_path_override and cli_path_override.strip():
-            p = Path(cli_path_override.strip())
-            if p.is_file() and os.access(str(p), os.X_OK):
-                print(f"[llama-yf] Using specified CLI: {p}")
-                return str(p)
-            else:
-                print(f"[llama-yf] Warning: Specified CLI not found: {p}")
-        
-        # 2. 使用插件目录内的llama-mtmd-cli.exe
-        plugin_dir = Path(__file__).parent
-        plugin_cli = plugin_dir / "llama" / "llama-mtmd-cli.exe"
-        if plugin_cli.is_file() and os.access(str(plugin_cli), os.X_OK):
-            print(f"[llama-yf] Using plugin CLI: {plugin_cli}")
-            return str(plugin_cli)
-        
-        # 3. 检查当前目录的llama子目录
-        local_llama = Path.cwd() / "llama" / "llama-mtmd-cli.exe"
-        if local_llama.is_file() and os.access(str(local_llama), os.X_OK):
-            print(f"[llama-yf] Using local llama CLI: {local_llama}")
-            return str(local_llama)
-        
-        # 4. 最后才去PATH找
-        found = shutil.which("llama-mtmd-cli")
-        if found:
-            print(f"[llama-yf] ⚠️  Using PATH CLI: {found}")
-            return found
-        
-        raise FileNotFoundError(
-            "[llama-yf] llama-mtmd-cli not found. "
-            "Please compile it or set the cli_path input. "
-            "The binary should be in the plugin's llama/ directory."
-        )
-
-    @staticmethod
     def _tensor_to_temp_image(tensor: torch.Tensor) -> str:
         """Save ComfyUI IMAGE tensor as a temporary PNG. Returns file path."""
         if tensor.dim() == 4:
@@ -371,172 +325,6 @@ class LlamaYF:
         os.close(fd)
         pil.save(path, format="PNG")
         return path
-
-    @staticmethod
-    def _invoke_cli(
-        cli_path: str,
-        model_path: Path,
-        mmproj_path: Path,
-        prompt: str,
-        system_prompt: str,
-        image_paths: str | list[str] | None,
-        max_tokens: int,
-        temperature: float,
-        top_p: float,
-        top_k: int,
-        repeat_penalty: float,
-        n_gpu_layers: int,
-        ctx_size: int,
-        enable_thinking: bool,
-        seed: int,
-        threads: int,
-        disable_warmup: bool = False,
-        fit_off: bool = False,
-        max_frames: int = -1,
-        force_cpu: bool = False,
-    ) -> str:
-        """Run llama-mtmd-cli and return the generated text."""
-        
-        # 如果 seed 为 -1，则生成随机种子
-        if seed == -1:
-            actual_seed = random.randint(1, 2**31 - 1)
-        else:
-            actual_seed = seed
-            
-        # 基础命令 - 使用 llama.cpp 标准参数
-        cmd = [
-            cli_path,
-            "-m", str(model_path),
-            "--mmproj", str(mmproj_path),
-            "-n", str(max_tokens),
-            "--temp", str(temperature),
-            "--top-p", str(top_p),
-            "--top-k", str(top_k),
-            "--repeat-penalty", str(repeat_penalty),
-            "-ngl", "0" if force_cpu else str(n_gpu_layers),
-            "-c", str(ctx_size),
-            "--seed", str(actual_seed),
-            "-t", str(threads),
-            "--image-min-tokens", "1024",  # Qwen-VL 需要至少 1024 图像 tokens
-            "--verbose",  # 添加详细日志
-        ]
-
-        if fit_off:
-            cmd.extend(["--fit", "off"])
-        if disable_warmup:
-            cmd.append("--no-warmup")
-
-        # 如果有图像，添加图像参数
-        if image_paths is not None:
-            if isinstance(image_paths, str):
-                # 单个图像路径
-                abs_image_paths = [os.path.abspath(image_paths)]
-                print(f"[llama-yf] Using image: {abs_image_paths[0]}")
-            else:
-                # 多个图像路径列表
-                abs_image_paths = [os.path.abspath(p) for p in image_paths]
-                print(f"[llama-yf] Using {len(abs_image_paths)} images: {', '.join(os.path.basename(p) for p in abs_image_paths[:3])}" + 
-                      ("..." if len(abs_image_paths) > 3 else ""))
-            
-            # 使用逗号分隔的路径作为 --image 参数值
-            cmd.extend(["--image", ",".join(abs_image_paths)])
-
-        # 构建提示词
-        thinking_instruction = "请先思考再回答，将思考过程放在<think>标签内。"
-        no_thinking_instruction = "直接回答问题，不要输出任何思考过程，不要使用<think>标签。"
-        if system_prompt and system_prompt.strip():
-            sys_text = system_prompt.strip()
-            if enable_thinking:
-                sys_text = thinking_instruction + "\n" + sys_text
-            else:
-                sys_text = no_thinking_instruction + "\n" + sys_text
-            full_prompt = f"<im_start>system\n{sys_text}\n</im_start>\n<im_start>user\n{prompt}\n</im_start>\n<im_start>assistant\n"
-        else:
-            if enable_thinking:
-                full_prompt = f"<im_start>system\n{thinking_instruction}\n</im_start>\n<im_start>user\n{prompt}\n</im_start>\n<im_start>assistant\n"
-            else:
-                full_prompt = f"<im_start>system\n{no_thinking_instruction}\n</im_start>\n<im_start>user\n{prompt}\n</im_start>\n<im_start>assistant\n"
-
-        cmd.extend(["-p", full_prompt])
-
-        # 打印调试信息
-        print(f"[llama-yf] Running command: {' '.join(cmd)}")
-        print(f"[llama-yf] === 生成参数 ===")
-        print(f"[llama-yf]   - 模型: {model_path.name}")
-        print(f"[llama-yf]   - 视觉模型: {mmproj_path.name}")
-        print(f"[llama-yf]   - 最大 tokens: {max_tokens}")
-        print(f"[llama-yf]   - 温度: {temperature}")
-        print(f"[llama-yf]   - Top-P: {top_p}")
-        print(f"[llama-yf]   - Top-K: {top_k}")
-        print(f"[llama-yf]   - 重复惩罚: {repeat_penalty}")
-        print(f"[llama-yf]   - GPU层数: {n_gpu_layers}")
-        print(f"[llama-yf]   - 上下文: {ctx_size}")
-        print(f"[llama-yf]   - 线程数: {threads}")
-        print(f"[llama-yf]   - 随机种子: {actual_seed}" if seed != -1 else f"[llama-yf]   - 随机种子: {actual_seed} (random)")
-        if image_paths is not None:
-            if isinstance(image_paths, str):
-                print(f"[llama-yf]   - 图像: {Path(image_paths).name}")
-            else:
-                image_names = [Path(p).name for p in image_paths]
-                if len(image_names) <= 3:
-                    print(f"[llama-yf]   - 图像: {', '.join(image_names)}")
-                else:
-                    print(f"[llama-yf]   - 图像: {', '.join(image_names[:3])}, ... ({len(image_names)} total)")
-        print(f"[llama-yf]   - 提示词: {prompt[:50]}..." if len(prompt) > 50 else f"[llama-yf]   - 提示词: {prompt}")
-        print(f"[llama-yf] ===================")
-        
-        try:
-            # 运行命令
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                encoding='utf-8',
-                errors='ignore',
-                timeout=300,  # 5分钟超时
-            )
-
-            print(f"[llama-yf] Return code: {result.returncode}")
-            
-            # 处理 stderr，只显示关键状态信息
-            if result.stderr:
-                # 只显示关键的 llama.cpp 状态信息
-                for line in result.stderr.split('\n'):
-                    if 'image slice encoded' in line or 'image decoded' in line or 'decoding image' in line:
-                        if 'image slice encoded' in line:
-                            print(f"[llama-yf] ✅ 图像编码")
-                        elif 'decoding image' in line:
-                            print(f"[llama-yf] ✅ 图像解码")
-                        elif 'image decoded' in line:
-                            print(f"[llama-yf] ✅ 图像处理完成")
-
-            if result.returncode != 0:
-                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
-                exit_code_hex = hex(result.returncode & 0xFFFFFFFF)
-                print(f"[llama-yf] ❌ 错误输出:")
-                print(f"{error_msg}")
-                print(f"[llama-yf] Exit code: {result.returncode} ({exit_code_hex})")
-                
-                # 常见错误提示
-                if "CUDA" in error_msg or "cuda" in error_msg or "GPU" in error_msg:
-                    print(f"[llama-yf] 💡 提示：检测到 CUDA/GPU 相关错误，请尝试:")
-                    print(f"[llama-yf]   - 减少 ctx_size (当前：{ctx_size})")
-                    print(f"[llama-yf]   - 减少 max_frames (当前：{max_frames})")
-                    print(f"[llama-yf]   - 关闭其他占用显存的程序")
-                    print(f"[llama-yf]   - 重启 ComfyUI 释放显存")
-                elif "memory" in error_msg.lower() or "alloc" in error_msg.lower():
-                    print(f"[llama-yf] 💡 提示：显存不足，请尝试减少参数或重启 ComfyUI")
-                
-                raise RuntimeError(
-                    f"[llama-yf] Inference failed (exit {result.returncode} / {exit_code_hex}): {error_msg}"
-                )
-
-            return result.stdout
-
-        except subprocess.TimeoutExpired:
-            raise RuntimeError("[llama-yf] Inference timed out after 300 seconds")
-        except Exception as e:
-            raise RuntimeError(f"[llama-yf] Failed to run inference: {str(e)}")
 
     @staticmethod
     def _invoke_api(
@@ -663,7 +451,6 @@ class LlamaYF:
         api_url: str = "http://127.0.0.1:8080",
         api_model: str = "llama",
         image=None,
-        cli_path: str = "",
     ):
         """处理输入并返回模型输出 - 支持 inference_mode"""
         
@@ -687,7 +474,6 @@ class LlamaYF:
             print(f"[llama-yf] Using preset prompt: {preset_prompt} (media: {media_type})")
         
         # 统一使用 API 模式（llama-server），不再使用 CLI
-        cli = None
         model_path = None
         mmproj_path = None
         use_api = True
@@ -753,29 +539,6 @@ class LlamaYF:
                         enable_thinking=enable_thinking,
                         seed=seed,
                     )
-                else:
-                    raw_output = LlamaYF._invoke_cli(
-                        cli_path=cli,
-                        model_path=model_path,
-                        mmproj_path=mmproj_path,
-                        prompt=prompt,
-                        system_prompt=system_prompt,
-                        image_paths=None,
-                        max_tokens=max_tokens,
-                        temperature=temperature,
-                        top_p=top_p,
-                        top_k=top_k,
-                        repeat_penalty=repeat_penalty,
-                        n_gpu_layers=n_gpu_layers,
-                        ctx_size=ctx_size,
-                        enable_thinking=enable_thinking,
-                        seed=seed,
-                        threads=threads,
-                        disable_warmup=disable_warmup,
-                        fit_off=fit_off,
-                        max_frames=max_frames,
-                        force_cpu=force_cpu,
-                    )
                 
                 response, thinking = LlamaYF._extract_thinking(raw_output)
                 
@@ -833,29 +596,6 @@ class LlamaYF:
                                     seed=seed,
                                     image_base64=image_b64,
                                 )
-                            else:
-                                raw_output = LlamaYF._invoke_cli(
-                                    cli_path=cli,
-                                    model_path=model_path,
-                                    mmproj_path=mmproj_path,
-                                    prompt=prompt,
-                                    system_prompt=system_prompt,
-                                    image_paths=image_path,
-                                    max_tokens=max_tokens,
-                                    temperature=temperature,
-                                    top_p=top_p,
-                                    top_k=top_k,
-                                    repeat_penalty=repeat_penalty,
-                                    n_gpu_layers=n_gpu_layers,
-                                    ctx_size=ctx_size,
-                                    enable_thinking=enable_thinking,
-                                    seed=seed,
-                                    threads=threads,
-                                    disable_warmup=disable_warmup,
-                                    fit_off=fit_off,
-                                    max_frames=max_frames,
-                                    force_cpu=force_cpu,
-                            )
                             
                             # 提取思考内容和响应
                             response, thinking = LlamaYF._extract_thinking(raw_output)
@@ -879,7 +619,7 @@ class LlamaYF:
                     # images/video 模式：所有图像一起推理
                     print(f"[llama-yf] Processing {len(frames)} images together")
                     
-                    # 构建多图提示词 (llama-mtmd-cli 支持多图输入)
+                    # 构建多图提示词 (llama-server 支持多图输入)
                     image_paths = []
                     try:
                         for img_frame in frames:
@@ -914,29 +654,6 @@ class LlamaYF:
                                 seed=seed,
                                 image_base64_list=image_b64_list,
                             )
-                        else:
-                            raw_output = LlamaYF._invoke_cli(
-                                cli_path=cli,
-                                model_path=model_path,
-                                mmproj_path=mmproj_path,
-                                prompt=prompt,
-                                system_prompt=system_prompt,
-                                image_paths=image_paths if image_paths else None,
-                                max_tokens=max_tokens,
-                                temperature=temperature,
-                                top_p=top_p,
-                                top_k=top_k,
-                                repeat_penalty=repeat_penalty,
-                                n_gpu_layers=n_gpu_layers,
-                                ctx_size=ctx_size,
-                                enable_thinking=enable_thinking,
-                                seed=seed,
-                                threads=threads,
-                                disable_warmup=disable_warmup,
-                                fit_off=fit_off,
-                                max_frames=max_frames,
-                                force_cpu=force_cpu,
-                            )
                         
                         response, thinking = LlamaYF._extract_thinking(raw_output)
                         
@@ -970,29 +687,6 @@ class LlamaYF:
                         enable_thinking=enable_thinking,
                         seed=seed,
                     )
-                else:
-                    raw_output = LlamaYF._invoke_cli(
-                        cli_path=cli,
-                        model_path=model_path,
-                        mmproj_path=mmproj_path,
-                        prompt=prompt,
-                        system_prompt=system_prompt,
-                        image_paths=None,
-                        max_tokens=max_tokens,
-                        temperature=temperature,
-                        top_p=top_p,
-                        top_k=top_k,
-                        repeat_penalty=repeat_penalty,
-                        n_gpu_layers=n_gpu_layers,
-                        ctx_size=ctx_size,
-                        enable_thinking=enable_thinking,
-                        seed=seed,
-                        threads=threads,
-                        disable_warmup=disable_warmup,
-                        fit_off=fit_off,
-                        max_frames=max_frames,
-                        force_cpu=force_cpu,
-                    )
                 
                 response, thinking = LlamaYF._extract_thinking(raw_output)
                 
@@ -1009,9 +703,6 @@ class LlamaYF:
         except Exception as e:
             print(f"[llama-yf] Error during inference: {str(e)}")
             raise
-
-
-
 
 PRESET_TAGS = list(PRESET_PROMPTS.keys())
 
@@ -1067,7 +758,6 @@ class LlamaParams:
         params_info = f"{max_tokens}|{ctx_size}|{temperature}|{top_p}|{top_k}|{repeat_penalty}|{seed}|{enable_thinking}"
         return (params_info,)
 
-
 class LlamaVideoParams:
     """视频处理参数节点 - 仅在 video 模式下生效"""
     @classmethod
@@ -1116,11 +806,7 @@ class LlamaInference:
     FUNCTION = "inference"
     CATEGORY = "llama-yf"
     
-    def _find_cli(self):
-        for p in [Path(__file__).parent/"llama"/"llama-mtmd-cli.exe", Path("C:/llama.cpp/build/bin/Release/llama-mtmd-cli.exe")]:
-            if p.exists(): return str(p)
-        raise FileNotFoundError("llama-mtmd-cli.exe not found")
-    
+
     def _ensure_model(self, model_file):
         llm_dir = Path(folder_paths.models_dir) / "LLM"
         model_path = llm_dir / model_file
@@ -1461,8 +1147,6 @@ class LlamaInference:
             api_url = api_url.strip()
         else:
             api_url = "http://127.0.0.1:8080"
-        
-        cli = None
         model_path = None
         mmproj_path = None
 
@@ -1490,35 +1174,6 @@ class LlamaInference:
                     enable_thinking=enable_thinking,
                     image_b64_list=None,
                 )
-                if not enable_thinking:
-                    thinking = ""
-            else:
-                # 解析 model 路径
-                _cli = LlamaYF._find_cli()
-                _model_path, _mmproj_path = LlamaYF._ensure_model(model_file, mmproj_file)
-                raw_output = LlamaYF._invoke_cli(
-                    cli_path=_cli,
-                    model_path=_model_path,
-                    mmproj_path=_mmproj_path,
-                    prompt=prompt,
-                    system_prompt=system_prompt,
-                    image_paths=None,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    top_p=top_p,
-                    top_k=top_k,
-                    repeat_penalty=repeat_penalty,
-                    n_gpu_layers=n_gpu_layers,
-                    ctx_size=ctx_size,
-                    enable_thinking=enable_thinking,
-                    seed=seed,
-                    threads=threads,
-                    disable_warmup=disable_warmup,
-                    fit_off=fit_off,
-                    max_frames=max_frames,
-                    force_cpu=force_cpu,
-                )
-                response, thinking = self._extract_thinking(raw_output)
                 if not enable_thinking:
                     thinking = ""
             out1 = response
@@ -1564,33 +1219,6 @@ class LlamaInference:
                         )
                         print(f"[llama-yf] API mode - response length: {len(response)}, thinking length: {len(thinking)}")
                         # API 模式已经处理了 thinking，不需要再提取
-                        if not enable_thinking:
-                            thinking = ""
-                    else:
-                        # CLI 模式需要提取 thinking
-                        raw_output = LlamaYF._invoke_cli(
-                            cli_path=cli,
-                            model_path=model_path,
-                            mmproj_path=mmproj_path,
-                            prompt=prompt,
-                            system_prompt=system_prompt,
-                            image_paths=[image_path] if image_path else None,
-                            max_tokens=max_tokens,
-                            temperature=temperature,
-                            top_p=top_p,
-                            top_k=top_k,
-                            repeat_penalty=repeat_penalty,
-                            n_gpu_layers=n_gpu_layers,
-                            ctx_size=ctx_size,
-                            enable_thinking=enable_thinking,
-                            seed=seed,
-                            threads=threads,
-                            disable_warmup=disable_warmup,
-                            fit_off=fit_off,
-                            force_cpu=force_cpu,
-                        )
-                        response, thinking = self._extract_thinking(raw_output)
-                        print(f"[llama-yf] CLI mode - response length: {len(response)}, thinking length: {len(thinking)}")
                         if not enable_thinking:
                             thinking = ""
                     out2.append(response)
@@ -1641,33 +1269,6 @@ class LlamaInference:
                         # API 模式已经处理了 thinking，不需要再提取
                         if not enable_thinking:
                             thinking = ""
-                    else:
-                        # CLI 模式需要提取 thinking
-                        raw_output = LlamaYF._invoke_cli(
-                            cli_path=cli,
-                            model_path=model_path,
-                            mmproj_path=mmproj_path,
-                            prompt=prompt,
-                            system_prompt=system_prompt,
-                            image_paths=image_paths if image_paths else None,
-                            max_tokens=max_tokens,
-                            temperature=temperature,
-                            top_p=top_p,
-                            top_k=top_k,
-                            repeat_penalty=repeat_penalty,
-                            n_gpu_layers=n_gpu_layers,
-                            ctx_size=ctx_size,
-                            enable_thinking=enable_thinking,
-                            seed=seed,
-                            threads=threads,
-                            disable_warmup=disable_warmup,
-                            fit_off=fit_off,
-                            max_frames=max_frames,
-                            force_cpu=force_cpu,
-                        )
-                        response, thinking = self._extract_thinking(raw_output)
-                        if not enable_thinking:
-                            thinking = ""
                     out1 = response
                     out2 = [response]
                 finally:
@@ -1694,33 +1295,6 @@ class LlamaInference:
                     image_b64_list=None,  # 纯文本模式
                 )
                 # API 模式已经处理了 thinking，不需要再提取
-                if not enable_thinking:
-                    thinking = ""
-            else:
-                # CLI 模式需要提取 thinking
-                raw_output = LlamaYF._invoke_cli(
-                    cli_path=cli,
-                    model_path=model_path,
-                    mmproj_path=mmproj_path,
-                    prompt=prompt,
-                    system_prompt=system_prompt,
-                    image_paths=None,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    top_p=top_p,
-                    top_k=top_k,
-                    repeat_penalty=repeat_penalty,
-                    n_gpu_layers=n_gpu_layers,
-                    ctx_size=ctx_size,
-                    enable_thinking=enable_thinking,
-                    seed=seed,
-                    threads=threads,
-                    disable_warmup=disable_warmup,
-                    fit_off=fit_off,
-                    max_frames=max_frames,
-                    force_cpu=force_cpu,
-                )
-                response, thinking = self._extract_thinking(raw_output)
                 if not enable_thinking:
                     thinking = ""
             out1 = response

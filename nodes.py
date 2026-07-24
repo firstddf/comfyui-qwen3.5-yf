@@ -1238,16 +1238,31 @@ class LlamaInference:
             model = resp.json()["data"][0]["id"] if resp.status_code == 200 and "data" in resp.json() else "default"
         except: model = "default"
         
-                # 如果启用思考模式，添加特殊的 system prompt
+                # 处理思考模式
+        # 移除可能触发 Qwen3.5 原生思考的指令
+        think_keywords = [
+            "think silently", "think step by step", "请先思考", "将思考过程",
+            "不要输出思考过程", "不要使用<", "do not output thinking",
+            "no thinking", "直接回答问题，不要输出"
+        ]
+        if system_prompt and system_prompt.strip():
+            lines = system_prompt.strip().split("\n")
+            cleaned = []
+            for line in lines:
+                skip = False
+                for kw in think_keywords:
+                    if kw.lower() in line.lower():
+                        skip = True
+                        break
+                if not skip:
+                    cleaned.append(line)
+            system_prompt = "\n".join(cleaned).strip()
+        
         if enable_thinking:
             if system_prompt and system_prompt.strip():
                 system_prompt = "请先思考再回答，将思考过程放在<think>标签内。\n" + system_prompt
             else:
                 system_prompt = "请先思考再回答，将思考过程放在<think>标签内。"
-        elif system_prompt and system_prompt.strip():
-            system_prompt = "直接回答问题，不要输出任何思考过程，不要使用<think>标签。\n" + system_prompt
-        else:
-            system_prompt = "直接回答问题，不要输出任何思考过程，不要使用<think>标签。"
         messages = []
         if system_prompt and system_prompt.strip(): messages.append({"role": "system", "content": system_prompt.strip()})
         

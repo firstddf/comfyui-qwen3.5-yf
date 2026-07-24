@@ -1483,7 +1483,7 @@ class LlamaInference:
                 if not enable_thinking:
                     thinking = ""
             else:
-                raw_output = self._invoke_cli(
+                raw_output = LlamaYF._invoke_cli(
                     cli_path=cli,
                     model_path=model_path,
                     mmproj_path=mmproj_path,
@@ -1555,7 +1555,7 @@ class LlamaInference:
                             thinking = ""
                     else:
                         # CLI 模式需要提取 thinking
-                        raw_output = self._invoke_cli(
+                        raw_output = LlamaYF._invoke_cli(
                             cli_path=cli,
                             model_path=model_path,
                             mmproj_path=mmproj_path,
@@ -1630,7 +1630,7 @@ class LlamaInference:
                             thinking = ""
                     else:
                         # CLI 模式需要提取 thinking
-                        raw_output = self._invoke_cli(
+                        raw_output = LlamaYF._invoke_cli(
                             cli_path=cli,
                             model_path=model_path,
                             mmproj_path=mmproj_path,
@@ -1685,7 +1685,7 @@ class LlamaInference:
                     thinking = ""
             else:
                 # CLI 模式需要提取 thinking
-                raw_output = self._invoke_cli(
+                raw_output = LlamaYF._invoke_cli(
                     cli_path=cli,
                     model_path=model_path,
                     mmproj_path=mmproj_path,

@@ -1455,6 +1455,15 @@ class LlamaInference:
         if needs_images and not has_images:
             raise ValueError(f"Inference mode '"+chr(123)+"inference_mode'"+chr(125)+" requires image input")
         
+        # text 模式强制使用 API
+        if is_text_mode:
+            use_api = "True"
+            use_api_bool = True
+            if api_url and api_url.strip():
+                api_url = api_url.strip()
+            else:
+                api_url = "http://127.0.0.1:8080"
+        
         # 解析 use_api 布尔值和模型路径
         use_api_bool = use_api.lower() == "true" if isinstance(use_api, str) else bool(use_api)
         cli = None
